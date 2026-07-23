@@ -8,12 +8,25 @@ type ReportInput = {
 
 export function markdownReport(input: ReportInput): string {
   const lines = [`# Review Report: ${input.repositoryPath}`, "", "## Changed files"];
-  for (const file of input.changedFiles) {
-    lines.push(`- ${file.path} (${file.status})`);
+
+  if (input.changedFiles.length === 0) {
+    lines.push("No changed files detected.");
+  } else {
+    for (const file of input.changedFiles) {
+      lines.push(`- ${file.path} (${file.status})`);
+    }
   }
+
   lines.push("", "## Validation output");
-  for (const result of input.validationResults) {
-    lines.push(`### ${result.command}`, "```", result.output, "```");
+
+  if (input.validationResults.length === 0) {
+    lines.push("No validation commands were run.");
+  } else {
+    for (const result of input.validationResults) {
+      const label = result.status === "failed" ? "FAILED" : "passed";
+      lines.push(`### ${result.command} — ${label}`, "```", result.output, "```");
+    }
   }
+
   return lines.join("\n");
 }

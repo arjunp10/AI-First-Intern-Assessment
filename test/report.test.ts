@@ -13,4 +13,23 @@ describe("markdownReport", () => {
     expect(report).toContain("npm test");
     expect(report).toContain("ok");
   });
+
+  it("shows a no-changes message when changedFiles is empty", () => {
+    const report = markdownReport({
+      repositoryPath: "/work/sample",
+      changedFiles: [],
+      validationResults: [],
+    });
+    expect(report).toContain("No changed files");
+  });
+
+  it("marks failed validations clearly", () => {
+    const report = markdownReport({
+      repositoryPath: "/work/sample",
+      changedFiles: [],
+      validationResults: [{ command: "npm test", status: "failed", output: "1 test failed" }],
+    });
+    expect(report).toContain("FAILED");
+    expect(report).toContain("1 test failed");
+  });
 });
