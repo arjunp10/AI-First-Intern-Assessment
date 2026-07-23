@@ -10,12 +10,12 @@ type Args = {
   validations: string[];
 };
 
-function parseArgs(argv: string[]): Args {
+export function parseArgs(argv: string[]): Args {
   const args: Args = { command: argv[0] ?? "", validations: [] };
   for (let index = 1; index < argv.length; index++) {
     const token = argv[index];
     if (token === "--repo") {
-      args.repositoryPath = argv[++index]?.split(" ")[0];
+      args.repositoryPath = argv[++index];
     } else if (token === "--base-ref") {
       args.baseRef = argv[++index];
     } else if (token === "--format") {
