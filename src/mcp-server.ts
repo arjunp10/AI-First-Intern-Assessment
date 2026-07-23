@@ -16,7 +16,7 @@ server.tool(
   },
   async (input: any) => {
     const report = await reviewRepository({
-      repositoryPath: input.repoPath,
+      repositoryPath: input.repo_path,
       baseRef: input.baseRef,
       validationCommands: input.validationCommands,
     });
