@@ -21,4 +21,10 @@ describe("parseDiffLine", () => {
   it("parses copied file — uses new path", () => {
     expect(parseDiffLine("C100\torig.ts\tcopy.ts")).toEqual({ path: "copy.ts", status: "added" });
   });
+
+  it("returns empty path string for malformed line with no tab", () => {
+    const result = parseDiffLine("M");
+    expect(result.status).toBe("modified");
+    expect(result.path).toBe("");
+  });
 });
