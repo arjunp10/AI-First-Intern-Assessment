@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseArgs } from "../src/cli.js";
+import { parseArgs, reportFileName } from "../src/cli.js";
 
 describe("parseArgs", () => {
   // Basic command parsing
@@ -152,5 +152,19 @@ describe("parseArgs", () => {
   it("unknown flag does not consume the following real flag", () => {
     const args = parseArgs(["review", "--unknown", "--repo", "/tmp"]);
     expect(args.repositoryPath).toBe("/tmp");
+  });
+});
+
+describe("reportFileName", () => {
+  it("returns review-report.md for undefined format", () => {
+    expect(reportFileName(undefined)).toBe("review-report.md");
+  });
+
+  it("returns review-report.md for markdown format", () => {
+    expect(reportFileName("markdown")).toBe("review-report.md");
+  });
+
+  it("returns review-report.json for json format", () => {
+    expect(reportFileName("json")).toBe("review-report.json");
   });
 });

@@ -34,10 +34,16 @@ export function parseArgs(argv: string[]): Args {
   return args;
 }
 
+export function reportFileName(format?: string): string {
+  return format === "json" ? "review-report.json" : "review-report.md";
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.command !== "review" || !args.repositoryPath) {
-    console.error("Usage: inspector review --repo <path> [--base-ref <ref>] [--validate <command>]");
+    console.error(
+      "Usage: inspector review --repo <path> [--base-ref <ref>] [--format markdown|json] [--validate <command>]",
+    );
     process.exitCode = 1;
     return;
   }
@@ -48,8 +54,9 @@ async function main() {
     validationCommands: args.validations,
     format: args.format,
   });
-  writeFileSync("review-report.md", report, "utf8");
-  console.log("Review report written to review-report.md");
+  const outFile = reportFileName(args.format);
+  writeFileSync(outFile, report, "utf8");
+  console.log(`Review report written to ${outFile}`);
 }
 
 main().catch((error) => {

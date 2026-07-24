@@ -27,6 +27,14 @@ export function parseDiffLine(line: string): ChangedFile {
 
 export function changedFiles(repositoryPath: string, baseRef?: string): ChangedFile[] {
   const base = baseRef ?? "main";
-  const output = git(repositoryPath, ["diff", "--name-status", `${base}...HEAD`]);
+  // core.quotePath=false makes git emit real UTF-8 paths instead of quoting and
+  // octal-escaping non-ASCII filenames (e.g. "caf\303\251.ts" -> café.ts).
+  const output = git(repositoryPath, [
+    "-c",
+    "core.quotePath=false",
+    "diff",
+    "--name-status",
+    `${base}...HEAD`,
+  ]);
   return output.split("\n").filter(Boolean).map(parseDiffLine);
 }

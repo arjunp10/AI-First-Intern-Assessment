@@ -6,6 +6,15 @@ type ReportInput = {
   validationResults: ValidationResult[];
 };
 
+// Returns a tilde fence guaranteed longer than any run of tildes in `content`,
+// so arbitrary command output (which may itself contain ``` or ~~~) can never
+// close the code block early. See CommonMark fenced-code-block rules.
+function fenceFor(content: string): string {
+  const runs = content.match(/~+/g) ?? [];
+  const longest = runs.reduce((max, run) => Math.max(max, run.length), 0);
+  return "~".repeat(Math.max(3, longest + 1));
+}
+
 export function markdownReport(input: ReportInput): string {
   const lines = [`# Review Report: ${input.repositoryPath}`, "", "## Changed files"];
 
@@ -24,8 +33,8 @@ export function markdownReport(input: ReportInput): string {
   } else {
     for (const result of input.validationResults) {
       const label = result.status === "failed" ? "FAILED" : "passed";
-      // Use tilde fences so output containing backtick sequences doesn't break the block.
-      lines.push(`### ${result.command} — ${label}`, "~~~", result.output, "~~~");
+      const fence = fenceFor(result.output);
+      lines.push(`### ${result.command} — ${label}`, fence, result.output, fence);
     }
   }
 

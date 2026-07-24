@@ -8,7 +8,7 @@ The MCP server was the first thing I looked at because the README explicitly cal
 
 ## What did you choose to implement or fix?
 
-Fourteen bugs total, in priority order:
+Eighteen bugs total, in priority order:
 
 1. **MCP `repo_path` key mismatch** — handler read `input.repoPath` but schema declared `repo_path`. MCP was entirely broken.
 2. **Validation failures crashed the run** — non-zero exit codes caused `reject(error)` instead of recording `status: "failed"`.
@@ -28,19 +28,29 @@ A second audit pass (verified empirically with a probe script) found three more:
 13. **Passing commands with >1MB output falsely reported as failed** — `execFile`'s default `maxBuffer` is 1MB. A successful `npm test` with verbose output was truncated to exactly 1048576 bytes and marked `failed`. Raised `maxBuffer` to 50MB.
 14. **CLI arg parser stored `undefined` for a value flag at end of argv** — `--validate` with no following token pushed `undefined` into `validations: string[]`, violating the type. Rewrote the loop to only consume a value when one exists, and to never let an unknown flag swallow the following real flag.
 
+A third (max-effort) audit pass found four more, several verified empirically with probe scripts and new integration tests:
+
+15. **`bin` pointed to a nonexistent file** — `package.json` declared `"bin": "./dist/cli.js"`, but `tsc` (rootDir `.`) emitted `dist/src/cli.js` and also shipped compiled test files. `npm install -g` / `npx inspector` would fail with "file not found." Added `tsconfig.build.json` (rootDir `src`, src-only) so the build emits `dist/cli.js` matching the `bin`, and stopped shipping tests. Verified by running `node dist/cli.js`.
+16. **Non-ASCII filenames were mangled** — git's default `core.quotePath=true` emits `"caf\303\251.ts"` (quotes + octal escapes) for `café.ts`, which `parseDiffLine` returned verbatim. Added `-c core.quotePath=false` so git emits real UTF-8 paths. Verified with an integration test that builds a temp repo containing `café.ts` and `with space.ts`.
+17. **Report code fence could be closed early by command output** — the fixed `~~~` fence would terminate prematurely if validation output contained a bare `~~~` line. Replaced with a fence dynamically sized one longer than the longest tilde run in the output, so arbitrary output can never break the block.
+18. **JSON output was written to a `.md` file** — `--format json` produced JSON but wrote it to `review-report.md` and reported that filename. Added a `reportFileName()` helper so JSON goes to `review-report.json`; also added `--format` to the CLI usage string.
+
 Secondary improvements alongside the fixes:
 - Added `.describe()` to all MCP tool parameters so AI agents can use them correctly.
 - Changed sequential `runValidations` loop to `Promise.all` for parallel execution.
 - Guarded `parseDiffLine` against undefined array parts on malformed diff lines.
+- Added `changedFiles` integration tests (temp git repos) covering added files, non-ASCII/space filenames, no-change branches, and a missing base ref.
 
 For each fix: wrote a failing test first, fixed the code, verified with `npm test` and `npm run typecheck`, then committed.
 
 ## What did you intentionally not do?
 
 - **Input validation / path traversal hardening**: The tool trusts its caller entirely (appropriate for a local dev tool). A production networked deployment would need path allowlisting.
-- **Streaming output for large diffs**: Not a problem at current scale.
+- **Streaming output for large diffs**: Not a problem at current scale (output is capped at 50MB per validation).
 - **`--format` value validation in CLI**: An unrecognized format value defaults to Markdown at runtime, which is a reasonable silent fallback for a local tool.
-- **Integration test for full CLI flow**: Unit tests cover each module. An end-to-end test would require a fixture repo and subprocess execution — useful but out of scope for the time budget.
+- **Full CLI subprocess e2e test**: I added `changedFiles` integration tests against temp git repos, but did not add a test that spawns the built `dist/cli.js` binary itself. The module-level tests plus manual smoke tests cover the adapter.
+- **Windows support**: `execFile` won't resolve `.cmd` shims (e.g. `npm` on Windows), and the tool assumes a POSIX `git`. This is a macOS/Linux dev tool by design.
+- **Filenames containing literal tabs or newlines**: still break `--name-status` parsing. The robust fix is `-z` NUL-delimited parsing, which also changes rename-record format; deferred as a rare edge case. Non-ASCII and spaces are handled.
 
 ## Interface decision
 
@@ -67,7 +77,7 @@ $ npm run typecheck
 
 $ npm test
 # Test Files  5 passed (5)
-#       Tests  113 passed (113)
+#       Tests  123 passed (123)
 
 $ npm run build
 # exit 0, no output (clean compile to dist/)

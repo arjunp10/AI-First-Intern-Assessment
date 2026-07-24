@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { parseDiffLine } from "../src/git.js";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterAll, describe, expect, it } from "vitest";
+import { changedFiles, parseDiffLine } from "../src/git.js";
 
 describe("parseDiffLine", () => {
   // Basic status codes
@@ -120,5 +124,62 @@ describe("parseDiffLine", () => {
     expect(validStatuses).toContain(parseDiffLine("A\tf.ts").status);
     expect(validStatuses).toContain(parseDiffLine("M\tf.ts").status);
     expect(validStatuses).toContain(parseDiffLine("D\tf.ts").status);
+  });
+});
+
+describe("changedFiles (integration)", () => {
+  const repos: string[] = [];
+
+  function makeRepo(): string {
+    const dir = mkdtempSync(join(tmpdir(), "inspector-git-"));
+    repos.push(dir);
+    const run = (args: string[]) => execFileSync("git", args, { cwd: dir });
+    run(["init", "-q", "-b", "main"]);
+    run(["config", "user.email", "t@t.com"]);
+    run(["config", "user.name", "t"]);
+    writeFileSync(join(dir, "base.txt"), "base");
+    run(["add", "-A"]);
+    run(["commit", "-qm", "init"]);
+    run(["checkout", "-q", "-b", "feature"]);
+    return dir;
+  }
+
+  afterAll(() => {
+    for (const dir of repos) rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("returns [] when the branch has no changes vs base", () => {
+    const dir = makeRepo();
+    expect(changedFiles(dir, "main")).toEqual([]);
+  });
+
+  it("reports an added file", () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "new.ts"), "x");
+    execFileSync("git", ["add", "-A"], { cwd: dir });
+    execFileSync("git", ["commit", "-qm", "add"], { cwd: dir });
+    expect(changedFiles(dir, "main")).toContainEqual({ path: "new.ts", status: "added" });
+  });
+
+  it("preserves non-ASCII filenames (core.quotePath=false)", () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "café.ts"), "x");
+    execFileSync("git", ["add", "-A"], { cwd: dir });
+    execFileSync("git", ["commit", "-qm", "unicode"], { cwd: dir });
+    const files = changedFiles(dir, "main");
+    expect(files).toContainEqual({ path: "café.ts", status: "added" });
+  });
+
+  it("preserves filenames containing spaces", () => {
+    const dir = makeRepo();
+    writeFileSync(join(dir, "with space.ts"), "x");
+    execFileSync("git", ["add", "-A"], { cwd: dir });
+    execFileSync("git", ["commit", "-qm", "space"], { cwd: dir });
+    expect(changedFiles(dir, "main")).toContainEqual({ path: "with space.ts", status: "added" });
+  });
+
+  it("throws a descriptive error when the base ref does not exist", () => {
+    const dir = makeRepo();
+    expect(() => changedFiles(dir, "nonexistent-ref")).toThrow(/git command failed/);
   });
 });

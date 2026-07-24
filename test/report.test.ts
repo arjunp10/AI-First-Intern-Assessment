@@ -40,6 +40,33 @@ describe("markdownReport", () => {
     expect(report).toContain("~~~");
   });
 
+  it("grows the fence longer than any tilde run in the output so it cannot close early", () => {
+    const report = markdownReport({
+      ...sampleInput,
+      changedFiles: [],
+      validationResults: [{ command: "diff", status: "passed", output: "before\n~~~\nafter" }],
+    });
+    // The output contains a bare ~~~ line, so the fence must be at least ~~~~ (4).
+    expect(report).toContain("~~~~");
+    expect(report).toContain("before\n~~~\nafter");
+  });
+
+  it("opening and closing fences match and wrap the output", () => {
+    const output = "line1\n~~~~~\nline2"; // 5-tilde run inside
+    const report = markdownReport({
+      ...sampleInput,
+      changedFiles: [],
+      validationResults: [{ command: "cmd", status: "passed", output }],
+    });
+    // Fence must be 6 tildes (one longer than the 5-run), appearing before and after.
+    const fence = "~~~~~~";
+    const idx1 = report.indexOf(fence);
+    const idx2 = report.indexOf(fence, idx1 + fence.length);
+    expect(idx1).toBeGreaterThan(-1);
+    expect(idx2).toBeGreaterThan(idx1);
+    expect(report.slice(idx1 + fence.length + 1, idx2 - 1)).toBe(output);
+  });
+
   it("starts with a level-1 heading", () => {
     const report = markdownReport(sampleInput);
     expect(report.startsWith("# Review Report:")).toBe(true);
