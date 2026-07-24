@@ -56,8 +56,27 @@ When fixing `git.ts`, the AI initially suggested wrapping the entire `changedFil
 ## Commands used to verify the result, with outcomes
 
 ```
-npm run typecheck   # 0 errors
-npm test            # 22 tests, 5 files, all passed
+$ npm run typecheck
+# exit 0, no output (zero errors)
+
+$ npm test
+# Test Files  5 passed (5)
+#       Tests  22 passed (22)
+
+$ npm run build
+# exit 0, no output (clean compile to dist/)
+
+$ npm run inspector -- review --repo . --validate "echo hello"
+# Review report written to review-report.md
+# (review-report.md contents:)
+# # Review Report: .
+# ## Changed files
+# No changed files detected.
+# ## Validation output
+# ### echo hello — passed
+# ~~~
+# hello
+# ~~~
 ```
 
 Run after every individual fix and again after all fixes were complete.
