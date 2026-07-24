@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { runValidation } from "../src/validation.js";
+import { runValidation, runValidations } from "../src/validation.js";
 
 describe("runValidation", () => {
   it("resolves with status passed when command succeeds", async () => {
@@ -20,5 +20,22 @@ describe("runValidation", () => {
     );
     expect(result.status).toBe("failed");
     expect(result.output).toContain("err msg");
+  });
+
+  it("does not execute shell-injected commands after semicolon", async () => {
+    // With exec (shell), this would run node -e "process.exit(1)" and exit non-zero.
+    // With execFile, echo receives the semicolon as a literal arg and succeeds.
+    const result = await runValidation('echo hello; node -e "process.exit(1)"', process.cwd());
+    expect(result.status).toBe("passed");
+  });
+
+  it("runs all validation commands in parallel", async () => {
+    const start = Date.now();
+    await runValidations(
+      ["node -e \"setTimeout(()=>{},100)\"", "node -e \"setTimeout(()=>{},100)\""],
+      process.cwd(),
+    );
+    // Sequential would take ≥200ms; parallel takes ~100ms
+    expect(Date.now() - start).toBeLessThan(190);
   });
 });
