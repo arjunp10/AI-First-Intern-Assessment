@@ -8,36 +8,46 @@ The MCP server was the first thing I looked at because the README explicitly cal
 
 ## What did you choose to implement or fix?
 
-Six bugs, in priority order:
+Eleven bugs total, in priority order:
 
 1. **MCP `repo_path` key mismatch** — handler read `input.repoPath` but schema declared `repo_path`. MCP was entirely broken.
 2. **Validation failures crashed the run** — non-zero exit codes caused `reject(error)` instead of recording `status: "failed"`.
-3. **Renamed/copied files produced garbled paths** — `R100\told\tnew` lines were joined into one path string instead of extracting the new path.
-4. **Git errors had no context** — raw `execFileSync` throws gave no indication of which repo or command failed.
-5. **Repo paths with spaces were silently truncated** — `.split(" ")[0]` in the CLI arg parser.
-6. **Report sections were misleading when empty** — blank sections with no message; failed validations looked identical to passing ones.
+3. **Shell injection via `exec`** — `validation.ts` passed user-controlled `--validate` strings through `/bin/sh`, allowing metacharacters like `;` and `&&` to inject arbitrary commands. Replaced with `execFile` plus a minimal argv parser that handles quoted arguments without invoking a shell.
+4. **Renamed/copied files produced garbled paths** — `R100\told\tnew` lines were joined into one path string. Extracted new path; exported `parseDiffLine` for unit testing.
+5. **Git errors had no context** — raw `execFileSync` throws gave no indication of which repo or command failed.
+6. **Repo paths with spaces were silently truncated** — `.split(" ")[0]` in the CLI arg parser.
+7. **`format: "json"` silently ignored** — `ReviewRequest.format` was accepted but always produced Markdown. Implemented `jsonReport()` and wired the format parameter through `core.ts`.
+8. **Backtick fences in report could be broken** — if validation output contained ` ``` `, the Markdown code block would be invalid. Switched to tilde fences (`~~~`) which are CommonMark-compliant and can contain backtick sequences.
+9. **Dead `"untracked"` type** — `ChangedFile.status` included `"untracked"` which `git diff --name-status` never produces. Removed to prevent misleading type consumers.
+10. **MCP handler `input: any`** — bypassed all type safety. Replaced with destructured typed parameters inferred from the Zod schema.
+11. **No error handling in MCP handler** — exceptions from `reviewRepository` propagated raw to the MCP transport. Wrapped in try/catch returning `isError: true`.
 
-For each fix I wrote a failing test first, then fixed the code, then verified with `npm test` and `npm run typecheck` before committing.
+Secondary improvements alongside the fixes:
+- Added `.describe()` to all MCP tool parameters so AI agents can use them correctly.
+- Changed sequential `runValidations` loop to `Promise.all` for parallel execution.
+- Guarded `parseDiffLine` against undefined array parts on malformed diff lines.
+
+For each fix: wrote a failing test first, fixed the code, verified with `npm test` and `npm run typecheck`, then committed.
 
 ## What did you intentionally not do?
 
-- **JSON output format**: The CLI accepts `--format json` but `core.ts` always returns Markdown regardless. Wiring this up would require a format parameter flowing through core and report — reasonable scope but lower priority than correctness bugs.
-- **Input validation / path traversal hardening**: The tool trusts its caller entirely (appropriate for a local dev tool). A production networked deployment would need path allowlisting and command validation.
-- **Streaming output for large diffs**: For repos with thousands of changed files the report could be very large. Not a problem at current scale.
-- **Parallel validation execution**: Validations run sequentially. Parallelizing is straightforward but wasn't needed for correctness.
+- **Input validation / path traversal hardening**: The tool trusts its caller entirely (appropriate for a local dev tool). A production networked deployment would need path allowlisting.
+- **Streaming output for large diffs**: Not a problem at current scale.
+- **`--format` value validation in CLI**: An unrecognized format value defaults to Markdown at runtime, which is a reasonable silent fallback for a local tool.
+- **Integration test for full CLI flow**: Unit tests cover each module. An end-to-end test would require a fixture repo and subprocess execution — useful but out of scope for the time budget.
 
 ## Interface decision
 
 - **Decision:** Hybrid — CLI-first, MCP as secondary interface
 - **Primary user and execution environment:** Developers running the tool locally from a terminal (CLI), and AI coding agents such as Claude Code invoking it via MCP stdio. Both are real use cases served by different adapters.
-- **Trust boundary and allowed capabilities:** Both interfaces run with full local user trust — any path the user can read and any command they can run. Appropriate for a local dev tool; would need hardening for multi-tenant or networked deployment.
+- **Trust boundary and allowed capabilities:** Both interfaces run with full local user trust — any path the user can read and any command they can run. The `execFile` fix reduces the injection surface but the tool is still fundamentally a trusted-caller tool. A production networked deployment would need path allowlisting and command validation.
 - **Reliability, discoverability, latency/context, and output tradeoffs:** CLI writes a file on disk (easy to diff, scriptable in CI, zero extra setup). MCP returns the report inline in the tool response so an AI agent can act on it without parsing a file — better for agentic workflows but requires the MCP server to be running. Both share `core.ts` so there is no behavioral drift between them.
-- **How supported interfaces remain consistent:** Both adapters call `reviewRepository()` from `src/core.ts` with the same `ReviewRequest` type. A change to core is reflected in both interfaces automatically.
+- **How supported interfaces remain consistent:** Both adapters call `reviewRepository()` from `src/core.ts` with the same `ReviewRequest` type. A change to core is reflected in both interfaces automatically. Both now also support `format: "json"`.
 - **Evidence that would change this decision:** If telemetry showed zero CLI usage and all calls came through MCP, I would drop the CLI adapter and invest in richer structured output (JSON + Markdown) from the MCP tool. If the tool were used exclusively in CI scripts with no AI client, I would drop the MCP server.
 
 ## How did you use an AI coding agent?
 
-I used Claude Code (Claude Sonnet 4.6) throughout. It read all source files, identified the six bugs, wrote the implementation plan, and produced all the fixes and tests. I directed the order of work, reviewed each change before it was committed, and verified every test run myself.
+I used Claude Code (Claude Sonnet 4.6) throughout. It read all source files, identified bugs, wrote the implementation plan, and produced all the fixes and tests. I directed the order of work, reviewed each change before it was committed, verified every test run, and caught additional bugs (shell injection, dead type, backtick fences) that the initial plan missed.
 
 ## Where did you check, correct, or reject an AI suggestion? (required)
 
@@ -47,7 +57,7 @@ When fixing `git.ts`, the AI initially suggested wrapping the entire `changedFil
 
 ```
 npm run typecheck   # 0 errors
-npm test            # 15 tests, 5 files, all passed
+npm test            # 22 tests, 5 files, all passed
 ```
 
 Run after every individual fix and again after all fixes were complete.
@@ -58,11 +68,11 @@ The subagent dispatch I tried for parallelizing the fixes couldn't get tool perm
 
 ## Known limitations and the next three things you would do
 
-1. **Wire up `--format json`**: The CLI flag is parsed but ignored — `core.ts` always returns Markdown. Adding a `format` parameter to `ReviewRequest` and a `jsonReport()` function in `report.ts` would complete the contract.
-2. **Add an integration test for the full CLI flow**: The current tests are unit tests. An integration test that runs `npm run inspector -- review --repo . --base-ref HEAD~1` and checks the output file would catch adapter-level regressions.
-3. **Harden MCP input validation**: `repo_path` is accepted as any string. Adding a check that the path exists and is a git repository before calling `reviewRepository` would give MCP callers a clean error instead of a raw exception.
+1. **Add an integration test for the full CLI flow** — an end-to-end test that runs `npm run inspector -- review --repo . --base-ref HEAD~1` and checks the output file would catch adapter-level regressions that unit tests miss.
+2. **Validate `--format` argument in CLI** — currently an unrecognized value silently defaults to Markdown. Should print an error and exit 1.
+3. **MCP path existence check** — `repo_path` is accepted as any string; if the path doesn't exist or isn't a git repo, the error from `execFileSync` propagates as an uncontrolled exception even though the MCP handler now catches it. A pre-flight check with a clear error message would be better UX.
 
 ## Approximate focused-work time
 
 - Start: 2026-07-23 19:30
-- Finish: 2026-07-23 20:00
+- Finish: 2026-07-23 20:15
