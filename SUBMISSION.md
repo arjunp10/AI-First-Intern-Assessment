@@ -61,7 +61,7 @@ $ npm run typecheck
 
 $ npm test
 # Test Files  5 passed (5)
-#       Tests  22 passed (22)
+#       Tests  107 passed (107)
 
 $ npm run build
 # exit 0, no output (clean compile to dist/)
