@@ -8,7 +8,7 @@ The MCP server was the first thing I looked at because the README explicitly cal
 
 ## What did you choose to implement or fix?
 
-Eleven bugs total, in priority order:
+Fourteen bugs total, in priority order:
 
 1. **MCP `repo_path` key mismatch** — handler read `input.repoPath` but schema declared `repo_path`. MCP was entirely broken.
 2. **Validation failures crashed the run** — non-zero exit codes caused `reject(error)` instead of recording `status: "failed"`.
@@ -21,6 +21,12 @@ Eleven bugs total, in priority order:
 9. **Dead `"untracked"` type** — `ChangedFile.status` included `"untracked"` which `git diff --name-status` never produces. Removed to prevent misleading type consumers.
 10. **MCP handler `input: any`** — bypassed all type safety. Replaced with destructured typed parameters inferred from the Zod schema.
 11. **No error handling in MCP handler** — exceptions from `reviewRepository` propagated raw to the MCP transport. Wrapped in try/catch returning `isError: true`.
+
+A second audit pass (verified empirically with a probe script) found three more:
+
+12. **Empty/malformed validation command crashed the whole run** — `splitCommand("")` threw *inside* the Promise executor, rejecting the promise; `Promise.all` then rejected and the entire review crashed. Same failure class as bug #2. Wrapped command parsing in try/catch so a bad command resolves as `status: "failed"` instead of taking down every other validation.
+13. **Passing commands with >1MB output falsely reported as failed** — `execFile`'s default `maxBuffer` is 1MB. A successful `npm test` with verbose output was truncated to exactly 1048576 bytes and marked `failed`. Raised `maxBuffer` to 50MB.
+14. **CLI arg parser stored `undefined` for a value flag at end of argv** — `--validate` with no following token pushed `undefined` into `validations: string[]`, violating the type. Rewrote the loop to only consume a value when one exists, and to never let an unknown flag swallow the following real flag.
 
 Secondary improvements alongside the fixes:
 - Added `.describe()` to all MCP tool parameters so AI agents can use them correctly.
@@ -61,7 +67,7 @@ $ npm run typecheck
 
 $ npm test
 # Test Files  5 passed (5)
-#       Tests  107 passed (107)
+#       Tests  113 passed (113)
 
 $ npm run build
 # exit 0, no output (clean compile to dist/)
@@ -89,7 +95,7 @@ The subagent dispatch I tried for parallelizing the fixes couldn't get tool perm
 
 1. **Add an integration test for the full CLI flow** — an end-to-end test that runs `npm run inspector -- review --repo . --base-ref HEAD~1` and checks the output file would catch adapter-level regressions that unit tests miss.
 2. **Validate `--format` argument in CLI** — currently an unrecognized value silently defaults to Markdown. Should print an error and exit 1.
-3. **MCP path existence check** — `repo_path` is accepted as any string; if the path doesn't exist or isn't a git repo, the error from `execFileSync` propagates as an uncontrolled exception even though the MCP handler now catches it. A pre-flight check with a clear error message would be better UX.
+3. **MCP path existence check** — `repo_path` is accepted as any string. The MCP handler now catches the resulting error, but the message is a raw git failure. A pre-flight check that the path exists and is a git repo would give callers a clearer, more actionable error.
 
 ## Approximate focused-work time
 

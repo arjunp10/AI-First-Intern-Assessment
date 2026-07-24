@@ -81,6 +81,25 @@ describe("runValidation", () => {
     expect(result).toHaveProperty("status");
     expect(result).toHaveProperty("output");
   });
+
+  it("resolves (does not reject) with failed status for an empty command", async () => {
+    const result = await runValidation("", process.cwd());
+    expect(result.status).toBe("failed");
+  });
+
+  it("resolves with failed status for a whitespace-only command", async () => {
+    const result = await runValidation("   ", process.cwd());
+    expect(result.status).toBe("failed");
+  });
+
+  it("reports a passing command as passed even when it emits more than 1MB of output", async () => {
+    const result = await runValidation(
+      "node -e \"process.stdout.write('x'.repeat(2*1024*1024))\"",
+      process.cwd(),
+    );
+    expect(result.status).toBe("passed");
+    expect(result.output.length).toBeGreaterThan(1024 * 1024);
+  });
 });
 
 describe("runValidations", () => {

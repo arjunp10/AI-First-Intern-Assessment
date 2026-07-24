@@ -39,10 +39,23 @@ function splitCommand(command: string): [string, ...string[]] {
   return tokens as [string, ...string[]];
 }
 
+// Allow up to 50MB of captured output so verbose but passing suites (e.g. npm
+// test) aren't falsely reported as failed by execFile's 1MB default maxBuffer.
+const MAX_OUTPUT_BYTES = 50 * 1024 * 1024;
+
 export function runValidation(command: string, cwd: string): Promise<ValidationResult> {
   return new Promise((resolve) => {
-    const [file, ...args] = splitCommand(command);
-    execFile(file, args, { cwd }, (error, stdout, stderr) => {
+    let file: string;
+    let args: string[];
+    try {
+      [file, ...args] = splitCommand(command);
+    } catch (err) {
+      // A malformed command must be reported, not crash the whole run.
+      const message = err instanceof Error ? err.message : String(err);
+      resolve({ command, status: "failed", output: message });
+      return;
+    }
+    execFile(file, args, { cwd, maxBuffer: MAX_OUTPUT_BYTES }, (error, stdout, stderr) => {
       if (error) {
         resolve({ command, status: "failed", output: stderr || stdout || error.message });
         return;

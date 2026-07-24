@@ -10,18 +10,25 @@ type Args = {
   validations: string[];
 };
 
+const VALUE_FLAGS = new Set(["--repo", "--base-ref", "--format", "--validate"]);
+
 export function parseArgs(argv: string[]): Args {
   const args: Args = { command: argv[0] ?? "", validations: [] };
   for (let index = 1; index < argv.length; index++) {
     const token = argv[index];
+    if (!VALUE_FLAGS.has(token)) continue;
+    // A value flag at the end of argv has no following value; skip it rather
+    // than storing undefined (which would violate the string types).
+    if (index + 1 >= argv.length) continue;
+    const value = argv[++index];
     if (token === "--repo") {
-      args.repositoryPath = argv[++index];
+      args.repositoryPath = value;
     } else if (token === "--base-ref") {
-      args.baseRef = argv[++index];
+      args.baseRef = value;
     } else if (token === "--format") {
-      args.format = argv[++index] as Args["format"];
+      args.format = value as Args["format"];
     } else if (token === "--validate") {
-      args.validations.push(argv[++index]);
+      args.validations.push(value);
     }
   }
   return args;

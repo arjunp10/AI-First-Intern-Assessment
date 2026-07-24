@@ -138,4 +138,19 @@ describe("parseArgs", () => {
   it("command 'Review' (capital R) is not treated as 'review'", () => {
     expect(parseArgs(["Review", "--repo", "/tmp"]).command).toBe("Review");
   });
+
+  it("--validate at end with no value does not push undefined", () => {
+    const args = parseArgs(["review", "--repo", "/tmp", "--validate"]);
+    expect(args.validations).toEqual([]);
+  });
+
+  it("--repo at end with no value leaves repositoryPath undefined", () => {
+    const args = parseArgs(["review", "--repo"]);
+    expect(args.repositoryPath).toBeUndefined();
+  });
+
+  it("unknown flag does not consume the following real flag", () => {
+    const args = parseArgs(["review", "--unknown", "--repo", "/tmp"]);
+    expect(args.repositoryPath).toBe("/tmp");
+  });
 });
