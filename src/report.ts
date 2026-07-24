@@ -24,9 +24,22 @@ export function markdownReport(input: ReportInput): string {
   } else {
     for (const result of input.validationResults) {
       const label = result.status === "failed" ? "FAILED" : "passed";
-      lines.push(`### ${result.command} — ${label}`, "```", result.output, "```");
+      // Use tilde fences so output containing backtick sequences doesn't break the block.
+      lines.push(`### ${result.command} — ${label}`, "~~~", result.output, "~~~");
     }
   }
 
   return lines.join("\n");
+}
+
+export function jsonReport(input: ReportInput): string {
+  return JSON.stringify(
+    {
+      repositoryPath: input.repositoryPath,
+      changedFiles: input.changedFiles,
+      validationResults: input.validationResults,
+    },
+    null,
+    2,
+  );
 }
